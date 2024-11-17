@@ -4,8 +4,8 @@ let similarity = [];
 // Fetch the movie and similarity data
 async function loadData() {
     try {
-        const movieResponse = await fetch('movies.json');
-        const similarityResponse = await fetch('similarity.json');
+        const movieResponse = await fetch('./movies.json');
+        const similarityResponse = await fetch('./similarity.json');
         movies = await movieResponse.json();
         similarity = await similarityResponse.json();
         populateMovieDropdown();  // Populate datalist for search suggestions
