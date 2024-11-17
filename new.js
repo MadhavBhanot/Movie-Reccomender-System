@@ -161,7 +161,7 @@ form.addEventListener('submit', (e) => {
     }
 });
 
-fetch('similarity.json')
+fetch('./similarity.json')
     .then(res => {
         if (!res.ok) {
             throw new Error('Network response was not ok');
@@ -170,7 +170,7 @@ fetch('similarity.json')
     })
     .then(similarityData => {
         console.log('Similarity Data:', similarityData); // Log to check data
-        fetch('movies.json')
+        fetch('./movies.json')
             .then(res => {
                 if (!res.ok) {
                     throw new Error('Network response was not ok');
@@ -205,7 +205,7 @@ fetch('similarity.json')
  // Fetch recommendations based on the last search from similarity.json and movies.json
 function getRecommendations(lastSearch) {
   recommendationsDiv.innerHTML = '<h2>Recommendations:</h2>';
-  fetch('similarity.json')
+  fetch('./similarity.json')
       .then(res => res.json())
       .then(similarityData => {
           fetch('movies.json')
