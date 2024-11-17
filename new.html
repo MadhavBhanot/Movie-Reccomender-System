@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Recommender</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #movieSearch {
+            width: 100%;
+            padding: 10px;
+            margin: 20px 0;
+        }
+        .recommendations {
+            display: flex;
+            justify-content: space-between;
+        }
+        .movie {
+            text-align: center;
+        }
+        .movie img {
+            width: 200px;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Movie Recommender System</h1>
+
+    <!-- Searchable dropdown with autocomplete -->
+    <input list="movieTitles" id="movieSearch" placeholder="Search for a movie..." />
+    <datalist id="movieTitles"></datalist>
+    <button id="searchBtn">Search</button>
+
+    <div id="recommendations" class="recommendations"></div>
+
+    <script>
+        let movies = [];
+        let similarity = [];
+        let recentSearches = [];
+
+        // Fetch the movie and similarity data
+        async function loadData() {
+            try {
+                const movieResponse = await fetch('movies.json');
+                const similarityResponse = await fetch('similarity.json');
+                movies = await movieResponse.json();
+                similarity = await similarityResponse.json();
+                populateMovieDropdown();  // Populate datalist for search suggestions
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        // Populate datalist for searchable dropdown
+        function populateMovieDropdown() {
+            const movieTitles = document.getElementById('movieTitles');
+            movies.forEach(movie => {
+                const option = document.createElement('option');
+                option.value = movie.title;
+                movieTitles.appendChild(option);
+            });
+        }
+
+        // Add a movie title to the recent search list
+        function addRecentSearch(movieTitle) {
+            if (recentSearches.includes(movieTitle)) return;
+            if (recentSearches.length >= 5) {
+                recentSearches.shift();  // Remove the oldest search if there are already 5
+            }
+            recentSearches.push(movieTitle);
+        }
+
+        // Function to calculate Levenshtein distance between two strings
+        function levenshteinDistance(a, b) {
+            const matrix = [];
+
+            let i;
+            for (i = 0; i <= b.length; i++) {
+                matrix[i] = [i];
+            }
+
+            let j;
+            for (j = 0; j <= a.length; j++) {
+                matrix[0][j] = j;
+            }
+
+            for (i = 1; i <= b.length; i++) {
+                for (j = 1; j <= a.length; j++) {
+                    if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1, // substitution
+                            matrix[i][j - 1] + 1,     // insertion
+                            matrix[i - 1][j] + 1      // deletion
+                        );
+                    }
+                }
+            }
+
+            return matrix[b.length][a.length];
+        }
+
+        // Find the closest matching movie if no exact match exists
+        function findClosestMatch(searchTerm) {
+            let closestMatch = null;
+            let minDistance = Infinity;
+
+            movies.forEach(movie => {
+                const distance = levenshteinDistance(searchTerm.toLowerCase(), movie.title.toLowerCase());
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestMatch = movie.title;
+                }
+            });
+
+            return closestMatch;
+        }
+
+        // Fetch movie poster using The Movie DB API
+        async function fetchPoster(movie_id) {
+            const url = `https://api.themoviedb.org/3/movie/${movie_id}?api_key=b71e51bd3f242fbc97a771bcce0f9944&language=en-US`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.poster_path ? `https://image.tmdb.org/t/p/w500/${data.poster_path}` : null;
+            } catch (error) {
+                console.error('Error fetching poster:', error);
+                return null;
+            }
+        }
+
+        // Recommend movies based on recent searches
+        async function recommend() {
+            let allRecommendedMovies = [];
+
+            for (let search of recentSearches) {
+                const movieIndex = movies.findIndex(movie => movie.title === search);
+                const distances = similarity[movieIndex]
+                    .map((sim, idx) => [idx, sim])
+                    .sort((a, b) => b[1] - a[1]);
+
+                const recommendedMovies = [];
+                for (let i = 1; i < 6; i++) {
+                    const movieData = movies[distances[i][0]];
+                    const poster = await fetchPoster(movieData.movie_id);
+                    if (poster) {
+                        recommendedMovies.push({ title: movieData.title, poster });
+                    }
+                }
+
+                allRecommendedMovies = [...allRecommendedMovies, ...recommendedMovies];
+            }
+
+            displayRecommendations(allRecommendedMovies);
+        }
+
+        // Display the recommended movies
+        function displayRecommendations(recommendedMovies) {
+            const recommendationsDiv = document.getElementById('recommendations');
+            recommendationsDiv.innerHTML = '';  // Clear previous recommendations
+
+            recommendedMovies.forEach(movie => {
+                const movieDiv = document.createElement('div');
+                movieDiv.classList.add('movie');
+                
+                const movieTitle = document.createElement('p');
+                movieTitle.textContent = movie.title;
+
+                const moviePoster = document.createElement('img');
+                moviePoster.src = movie.poster;
+                moviePoster.alt = movie.title;
+
+                movieDiv.appendChild(movieTitle);
+                movieDiv.appendChild(moviePoster);
+                recommendationsDiv.appendChild(movieDiv);
+            });
+        }
+
+        // Add event listener to the search button
+        document.getElementById('searchBtn').addEventListener('click', () => {
+            const searchedMovie = document.getElementById('movieSearch').value;
+            const movieExists = movies.some(movie => movie.title === searchedMovie);
+
+            if (movieExists) {
+                addRecentSearch(searchedMovie);
+                recommend();
+            } else {
+                const closestMatch = findClosestMatch(searchedMovie);
+                if (closestMatch) {
+                    alert(`Movie not found. Did you mean "${closestMatch}"?`);
+                    addRecentSearch(closestMatch);
+                    recommend();
+                } else {
+                    alert('No similar movies found.');
+                }
+            }
+        });
+
+        // Load data on page load
+        window.onload = loadData;
+    </script>
+</body>
+</html>
